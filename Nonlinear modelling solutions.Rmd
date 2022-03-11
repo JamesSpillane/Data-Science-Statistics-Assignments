@@ -1,0 +1,254 @@
+---
+title: "Assignment 1. Nonlinear modelling solutions"
+author: "James Spillane(18342921)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(moderndive)
+```
+
+## Instructions
+
+Complete Assignment 1 using this R markdown file, building a statistical analysis report through each of the questions. 
+
+Make sure to interpret your results and plots!
+
+Submit your final report via TurnItIn to Blackboard **in HTML format**. This Assignment counts as 25% of the module grade.
+
+# Child mortality
+
+## Study description
+
+Data are available on child mortality (0-5 year-olds dying per 1000 born) of 134 countries from 1800 to 2016. These data have been collated by Gapminder (an independent educational non-profit company). Child mortality is the main response variable here, measured as a rate of children aged under 5 who died per 1000 children born. We are interested in how this rate has changed over time in different countries and continents. We'll start by looking at Ireland, and then expand into all countries.
+
+
+## Read in data
+
+First read in the data, you will need to download the `child_mortality.csv` file from Blackboard and store it in the same folder as this Rmd file. Then you can read it in using the following code:
+
+```{r}
+dat <- read.csv("child_mortality.csv")
+```
+
+
+## Aims 
+
+A) To investigate changes in child mortality over time in Ireland
+B) To compare child mortality and its change between continents of the world
+C) To model changes in child mortality across all countries
+
+
+## Part A: Ireland [45 marks]
+
+### Linear regression
+
+a) Fit a linear regression model to investigate the association between child mortality and year in Ireland [2 marks]
+```{r}
+head(dat)
+```
+
+```{r}
+slr <- lm(childmortality ~ year, data=dat)
+```
+
+
+b) Produce a suitable summary table and plot for your linear regression model, and interpret the intercept and slope [6 marks]
+
+```{r}
+library(tidyverse)
+#Summary table
+summary(slr)
+get_regression_table(slr)
+#Scatterplot with line of best fit
+dat %>% ggplot(aes(x=year,y=childmortality)) + geom_point() + geom_smooth(method='lm')
+```
+
+**The equation of the line of best fit is: 4072 - 1.978(year). This means that the mean change in child mortality at year 0 is 4072. A one unit increase in year results in a 1.978 decrease in child mortality. The p-value <2e-16 which is close to zero, this suggests that we can reject the null hypothesis of no association between childmortality and year which suggests that year is a useful predictor of childmortality. Taking a look at the plot we can see that perhaps using more predictors would improve our line of best fit. **
+
+c) Assess whether this model is valid using diagnostic plots. Give your decision on the adequacy of this model [4 marks]
+
+```{r}
+get_regression_summaries(slr)
+```
+
+**As we can see our model has an rsquared value = 0.615. This means that 61.5% of the variation in childmortality is explained by year. This is a good rsquared value which suggests that our model is valid. Including more parameters would cause rsquared to increase.**
+### Polynomial regression
+
+d) Fit a polynomial regression model, choosing the optimal polynomial degree using $F$-tests to compare different models [6 marks]
+```{r}
+head(dat)
+```
+```{r}
+quadratic <- lm(childmortality ~ year + I(year^2),data=dat)
+#summary(quadratic)
+
+cubic <- lm(childmortality ~ year + I(year^2) + I(year^3),data=dat)
+#summary(cubic)
+anova(quadratic,cubic)
+
+quartic <- lm(childmortality ~ year + I(year^2) + I(year^3) + I(year^4),data=dat)
+#summary(quartic)
+anova(cubic, quartic)
+
+quintic <- lm(childmortality ~ year + I(year^2) + I(year^3) + I(year^4) + I(year^5),data=dat)
+#summary(quintic)
+anova(quartic, quintic)
+
+sextic <- lm(childmortality ~ year + I(year^2) + I(year^3) + I(year^4) + I(year^5) + I(year^6),data=dat)
+summary(sextic)
+anova(quintic, sextic)
+
+septic <- lm(childmortality ~ year + I(year^2) + I(year^3) + I(year^4) + I(year^5) + I(year^6) + I(year^7),data=dat)
+#summary(septic)
+anova(sextic, septic)
+```
+
+**The sextic or 6th degree polynomial model is preferred since the ANOVA F-test does not give evidence that a 7th degree polynomial term is beneficial.**
+
+e) Produce a summary table and plot for your chosen polynomial model and assess whether this is an adequate fit to the data [6 marks]
+
+```{r}
+get_regression_summaries(sextic)
+ggplot(dat, aes(x=year, y=childmortality)) + geom_point() + geom_smooth(method='lm', formula = y~poly(x,6))
+```
+**As we can see our model has now achieved an rsquared of 0.911. This means that 91.1% of the variation in childmortality is explained by our sextic model. As this is a high rsquared value this suggests that our model is an adequate fit to the data. The p-value is <2e-16 which is close to zero, this suggests that we can reject the null hypothesis of no association between childmortality and our specified model parameters which suggests that this model is a useful predictor of childmortality. Taking a look at the graph we can see that the fitted line is a much better fit than when we used a simple linear model.**
+
+### Spline regression
+
+f) Create linear spline basis terms with knots placed where a break in the trend appears to occur [4 marks]
+
+```{r}
+#We can see childmortality begins to decrease around 1925 - perhaps due to improvements in standard of living
+dat <- dat %>% mutate(year1925 = ifelse(year > 1925, year-1925,0))
+spline <- lm(childmortality ~ year + year1925, data=dat)
+summary(spline)
+
+#Plot the fitted spline and the data
+dat %>%
+  mutate(pred = predict(spline)) %>%
+  ggplot(aes(x=year,y=childmortality)) + geom_point() + 
+  geom_line(aes(x=year,y=pred),color='green',lwd=2)
+```
+
+
+g) Decide on the number and placement of knots using $F$-tests to compare different models [6 marks]
+
+```{r}
+#Let's take a look at a model with another knot where year=2000
+dat <- dat %>% mutate(year2000 = ifelse(year > 2000, year-2000,0))
+
+spline2 <- lm(childmortality ~ year + year1925 + year2000, data=dat)
+summary(spline)
+dat %>%
+  mutate(pred = predict(spline2)) %>%
+  ggplot(aes(x=year,y=childmortality)) + geom_point() + 
+  geom_line(aes(x=year,y=pred),color='green',lwd=2)
+
+anova(spline,spline2)
+```
+**No strong evidence that this has helped, we should revert to simpler model.**
+
+h) Produce a summary table and plot for your chosen linear spline model, and interpret the fitted regression line, i.e. the predicted change in child mortality in Ireland over time [8 marks]
+
+```{r}
+summary(spline)
+max(dat$year)
+```
+**Aveage childmortality in 1799 was 1745.32814, and every year until 1925 this figure decreased by 0.72490 on average. From 1926 to 2016 childmortality decreased by 3.29024 on average each year.**
+
+i) Decide on an optimal regression model (linear, polynomial or spline) for child mortality over time in Ireland, and justify your choice [3 marks]
+
+```{r}
+anova(spline,sextic,slr)
+get_regression_summaries(spline)
+get_regression_summaries(sextic)
+get_regression_summaries(slr)
+```
+**As we can see the best performing model is our 6th degree polynomial model. It performs the best of the models in the anova test and also has the highest rsquared value of all the models.**
+
+## Part B: Continent comparisons [25 marks]
+
+Using spline or polynomial regression (whichever you found best in Part A), investigate whether continent is associated with (i) average child mortality and (ii) changes in child mortality over time. 
+
+a) Plot the child mortality over time colouring by continent [Hint: use `geom_smooth(se=FALSE)` to see the average trend for each `continent`]  [3 marks]
+
+```{r}
+ggplot(dat, aes(x=year, y=childmortality, color=continent)) + theme_bw() + geom_smooth(se=FALSE)
+```
+
+
+b) Create linear spline basis terms with knots placed where a break in the trend appears to occur [3 marks]
+
+```{r}
+dat <- dat %>% mutate(Year1910 = ifelse(year > 1910, year-1910,0))
+dat <- dat %>% mutate(Year1975 = ifelse(year > 1975, year-1975,0))
+#1925, 1980
+#best_model <- lm(childmortality ~ year1925*continent + year*continent, data=dat)
+#dat %>% mutate(pred=predict(best_model)) %>% ggplot(aes(x=year,y=childmortality)) + geom_point(aes(color=continent)) + theme_bw() + geom_line(aes(y=pred, color=continent),lwd=3)
+```
+
+
+c) Fit a linear spline regression model, including continent. Justify your final choice of model using an $F$-test to compare models [6 marks]
+
+```{r}
+spline3 <- lm(childmortality ~ continent + year + Year1910 + Year1975 + year*continent , data=dat)
+spline31 <- lm(childmortality ~ year*continent + Year1910*continent + Year1975*continent, data=dat)
+anova(sextic, spline31)
+```
+
+
+d) Produce a summary table and plot for your chosen model of child mortality over time by continent [5 marks]
+
+```{r}
+summary(spline31)
+dat %>% mutate(pred=predict(spline31)) %>% ggplot(aes(x=year,y=childmortality)) + geom_point(aes(color=continent)) + theme_bw() + geom_line(aes(y=pred, color=continent),lwd=3)
+```
+
+
+e) Interpret the model output - in particular the **regression fit (i.e. the predicted change in child mortality over time) for one continent of your choosing** [8 marks]
+**Let's have a look at Africa. From 1800 to 1910 child mortality increases by 0.09045 each year. The slope then changes by -3.59143 meaning that child mortality is decreasing by 3.501 between 1910 and 1975. From 1975 child mortality in Africa continues to decrease, it decreases by 3.755.**
+
+
+## Part C: Linear mixed model [30 marks]
+
+Using the mixed model framework investigate child mortality over time in all countries together
+
+a) Create a spaghetti plot of child mortality over time by country [Hint: you might need to turn off the legend, using `theme(legend.position = "none")`]  [1 mark]
+
+```{r}
+ggplot(dat, aes(x = year, y = childmortality, color = country)) + 
+  geom_line() + theme_bw() + theme(legend.position = "none")
+```
+
+
+b) Create a model of child mortality over time with random effects for countries and fixed effects for continents (remember to use splines and interactions where necessary)  [6 marks]
+
+```{r}
+library(nlme)
+lmm_spline <- lme(childmortality ~ year*continent + Year1910*continent + Year1975*continent, data=dat, random= ~year|country)
+```
+
+
+c) Produce a summary table and plot for your chosen mixed model of child mortality over time by continent [6 marks]
+
+```{r}
+summary(lmm_spline)
+dat %>% mutate(pred=predict(lmm_spline)) %>% ggplot(aes(x=year,y=childmortality)) + geom_point(aes(color=continent)) + theme_bw() + geom_line(aes(y=pred, color=continent),lwd=2)
+```
+
+
+d) Interpret the model output and plot carefully [6 marks]
+
+
+e) Interpret the intraclass correlation coefficient [3 marks]
+
+
+f) Using a plot of fitted values, compare the best linear unbiased prediction (BLUP) for Ireland from the mixed model with the fitted regression model in Part A. Why are these fits different? Which is better? Why? [8 marks]
+
+```{r}
+
+```
+
